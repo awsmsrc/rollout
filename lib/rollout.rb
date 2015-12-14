@@ -1,5 +1,5 @@
-require "rollout/legacy"
-require "zlib"
+require 'rollout/legacy'
+require 'zlib'
 
 class Rollout
   class Feature
@@ -9,17 +9,17 @@ class Rollout
     def initialize(name, string = nil)
       @name = name
       if string
-        raw_percentage,raw_users,raw_groups = string.split("|")
+        raw_percentage, raw_users, raw_groups = string.split('|')
         @percentage = raw_percentage.to_i
-        @users = (raw_users || "").split(",").map(&:to_s)
-        @groups = (raw_groups || "").split(",").map(&:to_sym)
+        @users = (raw_users || '').split(',').map(&:to_s)
+        @groups = (raw_groups || '').split(',').map(&:to_sym)
       else
         clear
       end
     end
 
     def serialize
-      "#{@percentage}|#{@users.join(",")}|#{@groups.join(",")}"
+      "#{@percentage}|#{@users.join(',')}|#{@groups.join(',')}"
     end
 
     def add_user(user)
@@ -50,35 +50,36 @@ class Rollout
       else
         user_in_percentage?(user) ||
           user_in_active_users?(user) ||
-            user_in_active_group?(user, rollout)
+          user_in_active_group?(user, rollout)
       end
     end
 
     def to_hash
-      {:percentage => @percentage,
-       :groups     => @groups,
-       :users      => @users}
+      { percentage: @percentage,
+        groups: @groups,
+        users: @users }
     end
 
     private
-      def user_in_percentage?(user)
-        Zlib.crc32(user.id.to_s) % 100 < @percentage
-      end
 
-      def user_in_active_users?(user)
-        @users.include?(user.id.to_s)
-      end
+    def user_in_percentage?(user)
+      Zlib.crc32(user.id.to_s) % 100 < @percentage
+    end
 
-      def user_in_active_group?(user, rollout)
-        @groups.any? do |g|
-          rollout.active_in_group?(g, user)
-        end
+    def user_in_active_users?(user)
+      @users.include?(user.id.to_s)
+    end
+
+    def user_in_active_group?(user, rollout)
+      @groups.any? do |g|
+        rollout.active_in_group?(g, user)
       end
+    end
   end
 
   def initialize(storage, opts = {})
     @storage  = storage
-    @groups = {:all => lambda { |user| true }}
+    @groups = { all: ->(_user) { true } }
     @legacy = Legacy.new(opts[:legacy_storage] || @storage) if opts[:migrate]
   end
 
@@ -89,9 +90,7 @@ class Rollout
   end
 
   def deactivate(feature)
-    with_feature(feature) do |f|
-      f.clear
-    end
+    with_feature(feature, &:clear)
   end
 
   def activate_group(feature, group)
@@ -152,38 +151,39 @@ class Rollout
       info = @legacy.info(feature)
       f = Feature.new(feature)
       f.percentage = info[:percentage]
-      f.groups = info[:groups].map { |g| g.to_sym }
-      f.users = info[:users].map { |u| u.to_s }
+      f.groups = info[:groups].map(&:to_sym)
+      f.users = info[:users].map(&:to_s)
       save(f)
       f
     end
   end
 
   def features
-    (@storage.get(features_key) || "").split(",").map(&:to_sym)
+    (@storage.get(features_key) || '').split(',').map(&:to_sym)
   end
 
   private
-    def key(name)
-      "feature:#{name}"
-    end
 
-    def features_key
-      "feature:__features__"
-    end
+  def key(name)
+    "feature:#{name}"
+  end
 
-    def with_feature(feature)
-      f = get(feature)
-      yield(f)
-      save(f)
-    end
+  def features_key
+    'feature:__features__'
+  end
 
-    def save(feature)
-      @storage.set(key(feature.name), feature.serialize)
-      @storage.set(features_key, (features | [feature.name]).join(","))
-    end
+  def with_feature(feature)
+    f = get(feature)
+    yield(f)
+    save(f)
+  end
 
-    def migrate?
-      @legacy
-    end
+  def save(feature)
+    @storage.set(key(feature.name), feature.serialize)
+    @storage.set(features_key, (features | [feature.name]).join(','))
+  end
+
+  def migrate?
+    @legacy
+  end
 end
