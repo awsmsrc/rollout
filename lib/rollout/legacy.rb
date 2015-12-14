@@ -2,7 +2,7 @@ class Rollout
   class Legacy
     def initialize(redis)
       @redis  = redis
-      @groups = {"all" => lambda { |user| true }}
+      @groups = { 'all' => ->(_user) { true } }
     end
 
     def activate_globally(feature)
@@ -44,8 +44,8 @@ class Rollout
       if user
         active_globally?(feature) ||
           user_in_active_group?(feature, user) ||
-            user_active?(feature, user) ||
-              user_within_active_percentage?(feature, user)
+          user_active?(feature, user) ||
+          user_within_active_percentage?(feature, user)
       else
         active_globally?(feature)
       end
@@ -62,73 +62,74 @@ class Rollout
     def info(feature = nil)
       if feature
         {
-          :percentage => (active_percentage(feature) || 0).to_i,
-          :groups     => active_groups(feature).map { |g| g.to_sym },
-          :users      => active_user_ids(feature),
-          :global     => active_global_features
+          percentage: (active_percentage(feature) || 0).to_i,
+          groups: active_groups(feature).map(&:to_sym),
+          users: active_user_ids(feature),
+          global: active_global_features
         }
       else
         {
-          :global     => active_global_features
+          global: active_global_features
         }
       end
     end
 
     private
-      def key(name)
-        "feature:#{name}"
-      end
 
-      def group_key(name)
-        "#{key(name)}:groups"
-      end
+    def key(name)
+      "feature:#{name}"
+    end
 
-      def user_key(name)
-        "#{key(name)}:users"
-      end
+    def group_key(name)
+      "#{key(name)}:groups"
+    end
 
-      def percentage_key(name)
-        "#{key(name)}:percentage"
-      end
+    def user_key(name)
+      "#{key(name)}:users"
+    end
 
-      def global_key
-        "feature:__global__"
-      end
+    def percentage_key(name)
+      "#{key(name)}:percentage"
+    end
 
-      def active_groups(feature)
-        @redis.smembers(group_key(feature)) || []
-      end
+    def global_key
+      'feature:__global__'
+    end
 
-      def active_user_ids(feature)
-        @redis.smembers(user_key(feature)).map { |id| id.to_i }
-      end
+    def active_groups(feature)
+      @redis.smembers(group_key(feature)) || []
+    end
 
-      def active_global_features
-        (@redis.smembers(global_key) || []).map(&:to_sym)
-      end
+    def active_user_ids(feature)
+      @redis.smembers(user_key(feature)).map(&:to_i)
+    end
 
-      def active_percentage(feature)
-        @redis.get(percentage_key(feature))
-      end
+    def active_global_features
+      (@redis.smembers(global_key) || []).map(&:to_sym)
+    end
 
-      def active_globally?(feature)
-        @redis.sismember(global_key, feature)
-      end
+    def active_percentage(feature)
+      @redis.get(percentage_key(feature))
+    end
 
-      def user_in_active_group?(feature, user)
-        active_groups(feature).any? do |group|
-          @groups.key?(group) && @groups[group].call(user)
-        end
-      end
+    def active_globally?(feature)
+      @redis.sismember(global_key, feature)
+    end
 
-      def user_active?(feature, user)
-        @redis.sismember(user_key(feature), user.id)
+    def user_in_active_group?(feature, user)
+      active_groups(feature).any? do |group|
+        @groups.key?(group) && @groups[group].call(user)
       end
+    end
 
-      def user_within_active_percentage?(feature, user)
-        percentage = active_percentage(feature)
-        return false if percentage.nil?
-        user.id % 100 < percentage.to_i
-      end
+    def user_active?(feature, user)
+      @redis.sismember(user_key(feature), user.id)
+    end
+
+    def user_within_active_percentage?(feature, user)
+      percentage = active_percentage(feature)
+      return false if percentage.nil?
+      user.id % 100 < percentage.to_i
+    end
   end
 end
